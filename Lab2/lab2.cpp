@@ -44,6 +44,14 @@ bool succeed;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+bool obstacleDect(const Object& robot, const grid_util& grid){
+    if(grid.grid[robot.x][robot.y] == 2) return true;
+    if(grid.grid[robot.x + robot.width][robot.y] == 2) return true;
+    if(grid.grid[robot.x + robot.width][robot.y + robot.height] == 2) return true;
+    if(grid.grid[robot.x][robot.y+ robot.height] == 2) return true;
+    return false;
+}
+
 int main(int argc, char const *argv[])
 {
     //==========CREATE ROBOT, GOAL, OBJECTS==========
@@ -100,6 +108,12 @@ int main(int argc, char const *argv[])
         if (max_count>=3600) {
             std::cout << "=====1 minute reached with no solution=====" << std::endl;
             break;
+        }
+
+
+        if (obstacleDect(robot, grid)) {
+        succeed = false;
+        break;  
         }
     }
 
