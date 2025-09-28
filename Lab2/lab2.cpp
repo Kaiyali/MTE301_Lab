@@ -52,6 +52,43 @@ bool obstacleDect(const Object& robot, const grid_util& grid){
     return false;
 }
 
+// Task 2: Clear obstacle by sliding orthogonally
+// direction = 'x' if robot was moving along x, 'y' if along y
+void obstacle_avoidance(Object& robot, char direction,
+                        std::vector<std::vector<int>>& robot_pos,
+                        const grid_util& grid) 
+{
+    while (obstacleDect(robot, grid)) {
+        if (direction == 'x') {
+            // If moving horizontally, slide vertically
+            robot.y += 1;   // You can flip to -1 if you want other side
+        } else {
+            // If moving vertically, slide horizontally
+            robot.x += 1;   // You can flip to -1 if you want other side
+        }
+        // Always update positions for renderer
+        robot_pos.push_back({robot.x, robot.y});
+    }
+}
+
+bool touchGoal(const Object& goal, const Object& robot, float radius) {
+    return (robot.x + radius >= goal.x &&
+            robot.x - radius <= goal.x + goal.width &&
+            robot.y + radius >= goal.y &&
+            robot.y - radius <= goal.y + goal.height);
+}
+
+bool checkWalls(int x, int y){
+    if(x >= width || x <= 0){
+        return true;
+    } 
+    if(y >= height || y <= 0){
+        return true;
+    } 
+    return false;
+}
+
+
 int main(int argc, char const *argv[])
 {
     //==========CREATE ROBOT, GOAL, OBJECTS==========
@@ -85,37 +122,34 @@ int main(int argc, char const *argv[])
     // main loop
     while (true)
     {
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//++++++++++++++WRITE YOUR CODE HERE++++++++++++++++++++++++++++++++++
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    // Example provided: simply loop 3600 times and move the robot right each time. 
-        // This will also show a fail message as the succeed variable was never set to true
-    // Do not change the while loop as it's made to end after 1 minute. This is to force this loop to eventually end so students can visualize code that gets stuck
-    // You can define other functions to use outside of the main function if you wish
-    // You may also define your own local variables inside main in addition to your own global variables. Make sure to know your variable scope
-
-        robot.x += 1;
-
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//++++++++++++++++END YOUR CODE HERE++++++++++++++++++++++++++++++++++
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-        // place the current robot position at the time step to robot_pos
         robot_pos.push_back({robot.x, robot.y});
         max_count++;
+
+        if (goal.x > robot.x) robot.x++;
+        else if (goal.x < robot.x) robot.x--;
+        else if (goal.y > robot.y) robot.y++;
+        else if (goal.y < robot.y) robot.y--;
+
+        // check obstacle collision
+        if (obstacleDect(robot, grid)) {
+            obstacle_avoidance(robot, 'x', robot_pos, grid);
+        }else{
+            obstacle_avoidance(robot, 'y', robot_pos, grid);
+        }
+    
+
+        // update position for renderer
+        robot_pos.push_back({robot.x, robot.y});
+
 
         // if more than a minute passed (in render window), exit
         if (max_count>=3600) {
             std::cout << "=====1 minute reached with no solution=====" << std::endl;
             break;
         }
-
-
-        if (obstacleDect(robot, grid)) {
-        succeed = false;
-        break;  
-        }
     }
+
+
 
     // send the results of the code to the renderer
     render_window(robot_pos, objects, robot_init, goal_init, width, height, succeed);
