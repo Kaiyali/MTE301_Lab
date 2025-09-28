@@ -159,17 +159,9 @@ int main(int argc, char const *argv[])
     // moveTowards(robot, targetCorner, 1.0f);  
 
 
-    if (robot.y < centerY) {
-        robot.y += 1;
-    } else if (robot.y > centerY) {
-        robot.y -= 1;
-    }
+    Point targetCorner {static_cast<float>(goal.x), static_cast<float>(goal.y)};
+    moveTowards(robot, targetCorner, 1.0f);
 
-    if (robot.x < centerX) {
-        robot.x += 1;
-    } else if (robot.x > centerX) {
-        robot.x -= 1;
-    }
 
 
     // if (robot.y < goal.y) {

@@ -1,11 +1,12 @@
 # Lab 1 - MTE301
 
 ## Tasks 1
-### Methodology
-1. Place the robot at a random starting position on the screen
-2. Increase the robot's position by 1 on the x-axis
-3. After moving the robot checks it checks
-4. If a robot collied the software closes
+
+1. Define a function `checkWalls(int x, int y)` that checks whether the robot’s coordinates exceed the environment boundaries (0, width) or (0, height).
+
+2. If the robot’s x or y goes outside, the function returns `true` → mission fails.
+
+3. Inside the main loop, if `checkWalls` is true, set `succeed` = `false` and `break`.
 ```C++
 bool checkWalls(int x, int y){
     if(x >= width || x <= 0){
@@ -18,7 +19,7 @@ bool checkWalls(int x, int y){
 } 
 ```
 
-#### In Game Loop:
+#### In Main Loop:
 
 ```c++
     if(checkWalls(robot.x, robot.y)){
@@ -27,10 +28,12 @@ bool checkWalls(int x, int y){
     }
 ```
 ### Tasks 2
-1. Place the robot in a random position.
-2. On each step, increase the x-position by 1 and decrease the y-position by 2.
-3. After moving, check for wall collision.
-4. If a collision is detected, stop and mark as failed.
+
+1. Define `touchGoal(const Object& goal, const Object& robot, float radius)` to check if the robot overlaps with the goal’s rectangle.
+
+2. Condition: the robot’s bounding circle (± radius) intersects with the goal’s bounding box.
+
+3. If intersection occurs, set `succeed = true` and `break` the loop.
 ```c++
 bool touchGoal(const Object& goal, const Object& robot, float radius) {
     return (robot.x + radius >= goal.x &&
@@ -49,11 +52,13 @@ bool touchGoal(const Object& goal, const Object& robot, float radius) {
     }
 ```
 ### Tasks 3
-1. Compare the robot’s x-position to the goal’s x-position.
-2. Move right or left until both x-values are equal.
-3. Then compare the robot’s y-position to the goal’s y-position.
-4. Move up or down until the y-values are equal.
-5. When both positions match the goal, stop and mark as successful.
+1. Start from the robot’s position.
+
+2. Move horizontally `(x-axis)` one pixel per iteration until the robot’s `x` matches the goal’s `x`.
+
+3. After reaching correct `x`, move vertically (y-axis) one pixel per iteration until the robot’s `y` matches the goal’s `y`.
+
+4. Uses simple incremental motion (`robot.x += 1` or `robot.y -= 1`, etc.).
 
 #### In Game Loop:
 
@@ -71,11 +76,13 @@ bool touchGoal(const Object& goal, const Object& robot, float radius) {
     }
 ```
 ### Tasks 4
-1. Compare the robot’s y-position to the goal’s y-position.
-2. Move right or left until both y-values are equal.
-3. Then compare the robot’s x-position to the goal’s x-position.
-4. Move up or down until the x-values are equal.
-5. When both positions match the goal, stop and mark as successful.
+1. Similar to Task 3, but the order of movement is swapped.
+
+2. Move vertically (y-axis) first, until the robot’s `y` matches the goal’s `y`.
+
+3. Then move horizontally (x-axis) until the robot’s `x` matches the goal’s `x`.
+
+4. Ensures the robot reaches the top-left of the goal by an L-shaped path.
 
 #### In Game Loop:
 
@@ -93,13 +100,29 @@ bool touchGoal(const Object& goal, const Object& robot, float radius) {
     }
 ```
 ### Tasks 5
+
+1. Calculate the target as the top-left corner of the goal (`goal.x, goal.y`).
+
+2. Use `moveTowards(robot, targetCorner, 1.0f)` to compute normalized step in both x and y directions.
+
+3. Each iteration moves the robot 1 pixel in the straight-line direction toward the goal.
+
+4. This ensures the robot follows the shortest possible path to the goal’s corner.
+#### In Game Loop:
+```C++
+    Point targetCorner {static_cast<float>(goal.x), static_cast<float(goal.y)};
+    moveTowards(robot, targetCorner, 1.0f);
+```
 ### Tasks 6
 
-1. Check the robot’s x and y positions in every loop.
-2. If x doesn’t match the goal, move left or right.
-3. If y doesn’t match the goal, move up or down.
-4. Adjust both x and y positions in the same step.
-5. Repeat until the robot overlaps with the goal.
+1. Compute the center point of the goal
+2. Define a target point as `(centerX, centerY)`.
+
+3. Use the same `moveTowards(robot, target, 1.0f)` function to move in a straight line.
+
+4. Each iteration moves the robot 1 pixel in the direction of the goal’s center.
+
+5. Robot follows a straight diagonal path from its initial position directly to the goal’s center.
 
 ```c++
     float centerX = goal.x + goal_width / 2.0f;
@@ -124,6 +147,19 @@ bool touchGoal(const Object& goal, const Object& robot, float radius) {
     }
 ```
 ### Tasks 7
+
+1. Identify all 4 corners of the goal rectangle:
+`(goal.x, goal.y), (goal.x+width, goal.y), (goal.x, goal.y+height), (goal.x+width, goal.y+height)`.
+
+2. Compute the Euclidean distance between the robot’s starting position and each corner.
+
+3. Select the closest corner (minimum distance).
+
+3. Define that corner as the target point.
+
+4. Use `moveTowards(robot, closestCorner, 1.0f)` to move in a straight line.
+
+5. Robot follows the shortest path to whichever corner is nearest, instead of always the top-left.
 
 ```C++
     struct Point{
@@ -171,3 +207,19 @@ bool touchGoal(const Object& goal, const Object& robot, float radius) {
     Point targetCorner = findClosestCorner(goal, robot);    
     moveTowards(robot, targetCorner, 1.0f);  
 ```
+
+
+
+
+* Cover page
+* Executive summary
+* Table of contents, figures, and tables
+* Introduction: Lab description and objectives
+* Methodology: Description of the proposed solutions provided in pseudocode or
+flowchart format.
+* Experiments & Discussions: Summary of the experiments performed, and
+observations made during the lab. Answer the questions asked in the lab
+manual, here.
+* Conclusions
+* References
+* Appendices: codes, figures, tables, graphs.
