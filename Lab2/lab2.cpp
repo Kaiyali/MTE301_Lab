@@ -32,6 +32,10 @@ std::vector<std::vector<int>> robot_pos;
 
 // Did mission succeed?
 bool succeed;
+int goal_y;
+
+char moving_direction = 'y';
+
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //+++++++++WRITE ANY FUNCTIONS OR GLOBAL VARIABLES HERE+++++++++++++++
@@ -43,30 +47,37 @@ bool succeed;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
+using namespace std;
 bool obstacleDect(const Object& robot, const grid_util& grid){
     if(grid.grid[robot.x][robot.y] == 2) return true;
-    if(grid.grid[robot.x + robot.width][robot.y] == 2) return true;
-    if(grid.grid[robot.x + robot.width][robot.y + robot.height] == 2) return true;
-    if(grid.grid[robot.x][robot.y+ robot.height] == 2) return true;
+    if(grid.grid[robot.x + robot.width -1][robot.y] == 2) return true;
+    if(grid.grid[robot.x + robot.width -1][robot.y + robot.height-1] == 2) return true;
+    if(grid.grid[robot.x][robot.y+ robot.height-1] == 2) return true;
     return false;
 }
 
 // Task 2: Clear obstacle by sliding orthogonally
 // direction = 'x' if robot was moving along x, 'y' if along y
 void obstacle_avoidance(Object& robot, char direction,
-                        std::vector<std::vector<int>>& robot_pos,
-                        const grid_util& grid) 
+                        std::vector<std::vector<int>>& robot_pos) 
 {
+    int move_x = 0;
+    int move_y = 0;
+    
+    if (direction == 'x') {
+        // Was moving in x, so clear obstacle by moving in y
+        // Move up (negative y direction)
+        move_y = -1;
+    } else {
+        // Was moving in y, so clear obstacle by moving in x
+        // Move right (positive x direction)
+        move_x = 1;
+    }
+    
+    // Keep moving perpendicular until obstacle is cleared
     while (obstacleDect(robot, grid)) {
-        if (direction == 'x') {
-            // If moving horizontally, slide vertically
-            robot.y += 1;   // You can flip to -1 if you want other side
-        } else {
-            // If moving vertically, slide horizontally
-            robot.x += 1;   // You can flip to -1 if you want other side
-        }
-        // Always update positions for renderer
+        robot.x += move_x;
+        robot.y += move_y;
         robot_pos.push_back({robot.x, robot.y});
     }
 }
@@ -119,35 +130,96 @@ int main(int argc, char const *argv[])
 //+++++++++++++++DEFINE ANY LOCAL VARIABLE HERE+++++++++++++++++++++++
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-    // main loop
-    while (true)
+
+while (true)
+{
+
+    //First check for obstacle and clear it
+    if (obstacleDect(robot, grid))
     {
-        robot_pos.push_back({robot.x, robot.y});
-        max_count++;
+        if(moving_direction == 'y'){
+            // Was moving in y, clear by moving in x
+            if (robot.x < goal.x){
+                robot.x += 1;
+            } else if (robot.x > goal.x){
+                robot.x -= 1;
+            }
+            robot_pos.push_back({robot.x, robot.y});  // ADD THIS LINE
+        } else if(moving_direction == 'x'){
+            // Was moving in x, clear by moving in y
+            if (robot.y < goal.y){
+                robot.y += 1;
+            } else if (robot.y > goal.y){
+                robot.y -= 1;
+            }
+            robot_pos.push_back({robot.x, robot.y});  // ADD THIS LINE
 
-        if (goal.x > robot.x) robot.x++;
-        else if (goal.x < robot.x) robot.x--;
-        else if (goal.y > robot.y) robot.y++;
-        else if (goal.y < robot.y) robot.y--;
-
-        // check obstacle collision
-        if (obstacleDect(robot, grid)) {
-            obstacle_avoidance(robot, 'x', robot_pos, grid);
-        }else{
-            obstacle_avoidance(robot, 'y', robot_pos, grid);
-        }
-    
-
-        // update position for renderer
-        robot_pos.push_back({robot.x, robot.y});
-
-
-        // if more than a minute passed (in render window), exit
-        if (max_count>=3600) {
-            std::cout << "=====1 minute reached with no solution=====" << std::endl;
-            break;
         }
     }
+
+    // Then do normal movement
+    if (robot.y < goal.y && obstacleDect(robot,grid) == false) { 
+        robot.y += 1; 
+        moving_direction = 'y';
+    } else if (robot.y > goal.y && obstacleDect(robot,grid) == false) { 
+        robot.y -= 1; 
+        moving_direction = 'y';
+    } else { 
+        if (robot.x < goal.x && obstacleDect(robot,grid) == false) { 
+            robot.x += 1; 
+            moving_direction = 'x';
+        } else if (robot.x > goal.x && obstacleDect(robot,grid) == false) { 
+            robot.x -= 1; 
+            moving_direction = 'x';
+        }
+    } 
+    if(robot.y == goal.y && obstacleDect(robot,grid) == true){
+        while(obstacleDect(robot, grid)){
+            for (int i = 0; i < 50; i++) {   
+            robot.y += 1;  
+            robot_pos.push_back({robot.x, robot.y}); 
+            }
+        }
+
+        while (robot.x != goal.x){
+            if (goal.x > robot.x) robot.x++;
+            else if (goal.x < robot.x) robot.x--;
+            robot_pos.push_back({robot.x, robot.y}); 
+        }
+    }
+    if(robot.x == goal.x && obstacleDect(robot,grid) == true){
+        while(obstacleDect(robot, grid)){
+            for (int i = 0; i < 50; i++) {   
+            robot.x += 1;  
+            robot_pos.push_back({robot.x, robot.y}); 
+            }
+        }
+
+        while (robot.y != goal.y){
+            if (goal.y > robot.y) robot.x++;
+            else if (goal.y < robot.y) robot.y--;
+            robot_pos.push_back({robot.x, robot.y}); 
+        }
+    }
+     
+    
+
+    if(touchGoal(goal, robot, radius)){
+        succeed = true;
+        break;
+    }
+
+
+    // Update position for renderer (ONLY ONCE per iteration)
+    robot_pos.push_back({robot.x, robot.y});
+
+    // Safety timeout
+    max_count++;
+    if (max_count >= 3600) {
+        cout << "=====1 minute reached with no solution=====" << endl;
+        break;
+    }
+}
 
 
 
