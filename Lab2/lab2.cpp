@@ -69,29 +69,6 @@ double distanceToGoal(const Object& robot, const Object& goal) {
 
 
 
-void obstacle_Movement(Object& robot, char direction,
-                        const Object& goal, 
-                        std::vector<std::vector<int>>& robot_pos ){
-        if(moving_direction == 'y'){
-            // Was moving in y, clear by moving in x
-            if (robot.x < goal.x){
-                robot.x += 1;
-            } else if (robot.x > goal.x){
-                robot.x -= 1;
-            }
-            robot_pos.push_back({robot.x, robot.y});  // ADD THIS LINE
-        } else if(moving_direction == 'x'){
-            // Was moving in x, clear by moving in y
-            if (robot.y < goal.y){
-                robot.y += 1;
-            } else if (robot.y > goal.y){
-                robot.y -= 1;
-            }
-            robot_pos.push_back({robot.x, robot.y});  // ADD THIS LINE
-        }
-}
-
-
 
 // Task 3: smarter obstacle avoidance
 // direction = 'x' if robot was moving along x, 'y' if along y
@@ -127,6 +104,26 @@ void obstacle_avoidance(Object& robot, char direction,
 
         // Update for renderer
         robot_pos.push_back({robot.x, robot.y});
+
+
+
+        //  if(moving_direction == 'y'){
+        //     // Was moving in y, clear by moving in x
+        //     if (robot.x < goal.x){
+        //         robot.x += 1;
+        //     } else if (robot.x > goal.x){
+        //         robot.x -= 1;
+        //     }
+        //     robot_pos.push_back({robot.x, robot.y});  // ADD THIS LINE
+        // } else if(moving_direction == 'x'){
+        //     // Was moving in x, clear by moving in y
+        //     if (robot.y < goal.y){
+        //         robot.y += 1;
+        //     } else if (robot.y > goal.y){
+        //         robot.y -= 1;
+        //     }
+        //     robot_pos.push_back({robot.x, robot.y});  // ADD THIS LINE
+        // }
     }
 }
 
@@ -234,9 +231,8 @@ while (true)
     //First check for obstacle and clear it
     if (obstacleDect(robot, grid))
     {
-        obstacle_Movement(robot, moving_direction, goal, robot_pos);
 
-        //obstacle_avoidance(robot, moving_direction, goal, robot_pos);
+        obstacle_avoidance(robot, moving_direction, goal, robot_pos);
     }
 
     if(touchGoal(goal, robot, radius)){
