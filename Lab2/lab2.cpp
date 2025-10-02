@@ -32,9 +32,9 @@ std::vector<std::vector<int>> robot_pos;
 
 // Did mission succeed?
 bool succeed;
-int goal_y;
-
 char moving_direction = 'y';
+
+
 
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -58,26 +58,74 @@ bool obstacleDect(const Object& robot, const grid_util& grid){
 
 // Task 2: Clear obstacle by sliding orthogonally
 // direction = 'x' if robot was moving along x, 'y' if along y
+// Compute Euclidean distance from robot center to goal center
+double distanceToGoal(const Object& robot, const Object& goal) {
+    double robot_cx = robot.x + robot.width / 2.0;
+    double robot_cy = robot.y + robot.height / 2.0;
+    double goal_cx = goal.x + goal.width / 2.0;
+    double goal_cy = goal.y + goal.height / 2.0;
+    return sqrt(pow(goal_cx - robot_cx, 2) + pow(goal_cy - robot_cy, 2));
+}
+
+
+
+void obstacle_Movement(Object& robot, char direction,
+                        const Object& goal, 
+                        std::vector<std::vector<int>>& robot_pos ){
+        if(moving_direction == 'y'){
+            // Was moving in y, clear by moving in x
+            if (robot.x < goal.x){
+                robot.x += 1;
+            } else if (robot.x > goal.x){
+                robot.x -= 1;
+            }
+            robot_pos.push_back({robot.x, robot.y});  // ADD THIS LINE
+        } else if(moving_direction == 'x'){
+            // Was moving in x, clear by moving in y
+            if (robot.y < goal.y){
+                robot.y += 1;
+            } else if (robot.y > goal.y){
+                robot.y -= 1;
+            }
+            robot_pos.push_back({robot.x, robot.y});  // ADD THIS LINE
+        }
+}
+
+
+
+// Task 3: smarter obstacle avoidance
+// direction = 'x' if robot was moving along x, 'y' if along y
 void obstacle_avoidance(Object& robot, char direction,
+                        const Object& goal, 
                         std::vector<std::vector<int>>& robot_pos) 
 {
-    int move_x = 0;
-    int move_y = 0;
-    
-    if (direction == 'x') {
-        // Was moving in x, so clear obstacle by moving in y
-        // Move up (negative y direction)
-        move_y = -1;
-    } else {
-        // Was moving in y, so clear obstacle by moving in x
-        // Move right (positive x direction)
-        move_x = 1;
-    }
-    
-    // Keep moving perpendicular until obstacle is cleared
+    // While robot is still colliding
     while (obstacleDect(robot, grid)) {
-        robot.x += move_x;
-        robot.y += move_y;
+        Object optionA = robot;
+        Object optionB = robot;
+
+        if (direction == 'x') {
+            // If moving in x, test clearing in +y (down) and -y (up)
+            optionA.y += 1;
+            optionB.y -= 1;
+        } else {
+            // If moving in y, test clearing in +x (right) and -x (left)
+            optionA.x += 1;
+            optionB.x -= 1;
+        }
+
+        // Compute distances to goal from both test positions
+        double distA = distanceToGoal(optionA, goal);
+        double distB = distanceToGoal(optionB, goal);
+
+        // Choose the better option
+        if (distA <= distB) {
+            robot = optionA;
+        } else {
+            robot = optionB;
+        }
+
+        // Update for renderer
         robot_pos.push_back({robot.x, robot.y});
     }
 }
@@ -98,6 +146,9 @@ bool checkWalls(int x, int y){
     } 
     return false;
 }
+
+
+
 
 
 int main(int argc, char const *argv[])
@@ -126,6 +177,7 @@ int main(int argc, char const *argv[])
     // maximum count. Close the loop after 3600 iterations. As the window is displayed at 60fps, this is 60 seconds.
     int max_count = 0;
 
+
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //+++++++++++++++DEFINE ANY LOCAL VARIABLE HERE+++++++++++++++++++++++
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -133,29 +185,6 @@ int main(int argc, char const *argv[])
 
 while (true)
 {
-
-    //First check for obstacle and clear it
-    if (obstacleDect(robot, grid))
-    {
-        if(moving_direction == 'y'){
-            // Was moving in y, clear by moving in x
-            if (robot.x < goal.x){
-                robot.x += 1;
-            } else if (robot.x > goal.x){
-                robot.x -= 1;
-            }
-            robot_pos.push_back({robot.x, robot.y});  // ADD THIS LINE
-        } else if(moving_direction == 'x'){
-            // Was moving in x, clear by moving in y
-            if (robot.y < goal.y){
-                robot.y += 1;
-            } else if (robot.y > goal.y){
-                robot.y -= 1;
-            }
-            robot_pos.push_back({robot.x, robot.y});  // ADD THIS LINE
-
-        }
-    }
 
     // Then do normal movement
     if (robot.y < goal.y && obstacleDect(robot,grid) == false) { 
@@ -201,14 +230,19 @@ while (true)
             robot_pos.push_back({robot.x, robot.y}); 
         }
     }
-     
-    
+
+    //First check for obstacle and clear it
+    if (obstacleDect(robot, grid))
+    {
+        obstacle_Movement(robot, moving_direction, goal, robot_pos);
+
+        //obstacle_avoidance(robot, moving_direction, goal, robot_pos);
+    }
 
     if(touchGoal(goal, robot, radius)){
         succeed = true;
         break;
     }
-
 
     // Update position for renderer (ONLY ONCE per iteration)
     robot_pos.push_back({robot.x, robot.y});
@@ -220,9 +254,6 @@ while (true)
         break;
     }
 }
-
-
-
     // send the results of the code to the renderer
     render_window(robot_pos, objects, robot_init, goal_init, width, height, succeed);
     return 0;
