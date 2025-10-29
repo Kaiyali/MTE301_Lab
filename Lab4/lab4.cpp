@@ -1,3 +1,5 @@
+//ignonore this file.
+
 #include <cmath>
 #include <iostream>
 #include <random>
@@ -5,190 +7,210 @@
 #include <fstream>
 #include <utility>
 #include <iomanip>
+#include <string>
+#include <vector>
 
 #include "utils.h"
 #include "render.h"
 
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//+++++++++++++++++++Modify my_robot class here+++++++++++++++++++
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// my_robot sub-class
-// modify here so it inherits from the Object class from utils.h
-class my_robot {
-    // define any private or protected members here
-    public:
-        // define constructor with necessary parameters
-            // example constructor that simply initializes grid to all -1
-        my_robot() {
-            grid = std::vector<std::vector<int>>(800, std::vector<int>(800, -1));
+using namespace std;
+
+class my_robot : public Object {
+private:
+    int phase = 0;
+    float move_speed = 1.0;
+    const float sin45 = 0.7071f;
+    int rotation = 0;
+    int dir_check[4] = {0};
+    int cur_mode[4] = {0};
+    int prev_mode[4] = {0};
+    int robot_to_wall[2] = {0};
+
+public:
+    int tol = 20;
+    int v = 0, h = 0;
+    std::vector<std::vector<int>> grid;
+    int lidar_range;
+
+
+
+    my_robot(int w, int h, int env_w, int env_h, int lidar)
+        : Object(w, h, env_w, env_h), lidar_range(lidar) {
+        grid.resize(env_w, std::vector<int>(env_h, -1));
+    }
+
+    void detect_walls(grid_util& true_grid, int tol) {
+        int x_c = x + width / 2;
+        int y_c = y + height / 2;
+        float tol_45 = sin45 * tol;
+
+        dir_check[0] = dir_check[1] = dir_check[2] = dir_check[3] = 0;
+
+        if (grid_value(true_grid, this, x_c - tol, y_c, lidar_range) == 1) dir_check[0] = -1;
+        else if (grid_value(true_grid, this, x_c + tol, y_c, lidar_range) == 1) dir_check[0] = 1;
+
+        if (grid_value(true_grid, this, x_c, y_c - tol, lidar_range) == 1) dir_check[1] = -1;
+        else if (grid_value(true_grid, this, x_c, y_c + tol, lidar_range) == 1) dir_check[1] = 1;
+
+        if (grid_value(true_grid, this, x_c + tol_45, y_c + tol_45, lidar_range) == 1) dir_check[2] = 1;
+        else if (grid_value(true_grid, this, x_c - tol_45, y_c - tol_45, lidar_range) == 1) dir_check[2] = -1;
+
+        if (grid_value(true_grid, this, x_c + tol_45, y_c - tol_45, lidar_range) == 1) dir_check[3] = 1;
+        else if (grid_value(true_grid, this, x_c - tol_45, y_c + tol_45, lidar_range) == 1) dir_check[3] = -1;
+    }
+
+    void find_dir(grid_util& true_grid, int tol) {
+        detect_walls(true_grid, tol);
+        for (int i = 0; i < 4; i++) cur_mode[i] = dir_check[i];
+
+        bool same = true;
+        for (int i = 0; i < 4; i++) {
+            if (cur_mode[i] != prev_mode[i]) {
+                same = false;
+                break;
+            }
         }
-        // call the constructor of the Object base class
-            // arguments are (width, height, env_width, min_y, max_y, tol)
-        // define the grid that the robot maps. It can be a nested array or vector of size 800x800
-            // example nested vector below
-        std::vector<std::vector<int>> grid;
-        // keep the same sensor developed in lab 3
-        // develop the wall following/sweep algorithms
-        // define any other public members and functions you wish to use
 
-        // function to save predicted grid
-        void save_grid_csv() {
-            std::string filename = "grid_pred.csv";
-            std::ofstream file(filename);
-
-            if (!file.is_open()) {
-                std::cerr << "Error: Could not open file " << filename << std::endl;
-                return;
+        if (!same) {
+            int zero_count = 0;
+            for (int i = 0; i < 4; i++) if (prev_mode[i] == 0) zero_count++;
+            if (zero_count >= 3) {
+                for (int i = 0; i < 4; i++) cur_mode[i] -= prev_mode[i];
             }
+        }
 
-            // determine the maximum row size by finding the size of the longest inner vector
-            size_t maxRowSize = 0;
-            for (const auto& col : grid) {
-                if (col.size() > maxRowSize) {
-                    maxRowSize = col.size();
+        if (cur_mode[2] == 1) {
+            robot_to_wall[0] = 1; robot_to_wall[1] = 1;
+        } else if (cur_mode[2] == -1) {
+            robot_to_wall[0] = -1; robot_to_wall[1] = -1;
+        } else if (cur_mode[3] == 1) {
+            robot_to_wall[0] = 1; robot_to_wall[1] = -1;
+        } else if (cur_mode[3] == -1) {
+            robot_to_wall[0] = -1; robot_to_wall[1] = 1;
+        } else {
+            robot_to_wall[0] = cur_mode[0];
+            robot_to_wall[1] = cur_mode[1];
+        }
+
+        for (int i = 0; i < 4; i++) prev_mode[i] = cur_mode[i];
+    }
+
+    void follow_wall(grid_util& true_grid, int tol) {
+        find_dir(true_grid, tol);
+
+        if (robot_to_wall[0] == 0 && robot_to_wall[1] == 0) {
+            x--; return;
+        }
+
+        if (rotation == 0) {
+            x += -robot_to_wall[1];
+            y += robot_to_wall[0];
+        } else {
+            x += robot_to_wall[1];
+            y += -robot_to_wall[0];
+        }
+
+        x = std::clamp(x, 0, 799);
+        y = std::clamp(y, 0, 799);
+    }
+
+    void sense(grid_util& true_grid) {
+        int x_c = x + width / 2;
+        int y_c = y + height / 2;
+
+        for (int i = x_c - lidar_range; i <= x_c + lidar_range; i++) {
+            for (int j = y_c - lidar_range; j <= y_c + lidar_range; j++) {
+                if (i >= 0 && j >= 0 && i < (int)grid.size() && j < (int)grid[0].size()) {
+                    int dx = i - x_c;
+                    int dy = j - y_c;
+                    if (dx * dx + dy * dy <= lidar_range * lidar_range) {
+                        grid[i][j] = grid_value(true_grid, this, i, j, lidar_range);
+                    }
                 }
             }
+        }
+    }
 
-            // output the grid in transposed form (columns become rows in CSV)
-            for (size_t row = 0; row < maxRowSize; ++row) {
-                for (size_t col = 0; col < grid.size(); ++col) {
-                    if (row < grid[col].size()) {
-                        file << grid[col][row];
-                    }
-                    if (col < grid.size() - 1) {
-                        file << ","; // Add comma except after the last element
-                    }
-                }
-                file << "\n"; // New line after each row
-            }
-
-            file.close();
-            std::cout << "Robot's grid written to " << filename << std::endl;
-        }      
+     void moveRobot(int h, int v){
+        if (h == 1 && v == 1) this->y += 1;
+        else if (h == 1 && v == 0) this->y += 1;
+        else if (h == 1 && v == -1) this->x -= 1;
+        else if (h == 0 && v == 1) this->x += 1;
+        else if (h == 0 && v == 0) this->x -= 1;
+        else if (h == 0 && v == -1) this->x -= 1;
+        else if (h == -1 && v == 1) this->x += 1;
+        else if (h == -1 && v == 0) this->y -= 1;
+        else if (h == -1 && v == -1) this->y -= 1;
+    }
 };
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-//===== Main parameters =====
-const int env_width {800}, env_height {800};        //Width and height of the environment
-const int radius {10};                              //Radius of the robot's circular body
-const int min_obj_size {50};                        //Maximum object dimension. Not required for lab 3/4
-const int max_obj_size {100};                       //Maximum object dimension. Not required for lab 3/4
-int lidar_range{50};                                //Lidar range, radiating from center of robot
+int main() {
+    const int env_width = 800, env_height = 800;
+    const int radius = 10;
+    const int lidar_range = 50;
 
-// Grid utility class
-grid_util grid(env_width, env_height, min_obj_size, max_obj_size);
+    auto config = read_csv();
+    std::string env_file = std::get<0>(config);
+    bool show_truth = std::get<1>(config);
+    int speed = std::get<2>(config);
+    int env_type = std::get<3>(config);
 
-// Random generator
-random_generator rand_gen;
+    grid_util grid(env_width, env_height, 50, 100);
+    std::vector<Object*> walls = (env_type == 4)
+        ? grid.create_walls(env_file)
+        : grid.create_angled_walls(env_file);
 
-// Vector of velocity commands
-std::vector<std::vector<int>> robot_pos;
+    my_robot robot(2 * radius, 2 * radius, env_width, env_height, lidar_range);
+    my_robot robot_init = robot;
 
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//++++++++++DEFINE ANY GLOBAL VARIABLES/FUNCTIONS HERE+++++++++++++++
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    std::vector<std::vector<int>> robot_path;
+    robot_path.push_back({robot.x, robot.y});
 
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    int task_choice;
+    std::cout << "Enter task number (1 = Right Wall Follow, 2 = Sweep Mapping): ";
+    std::cin >> task_choice;
 
-int main(int argc, char const *argv[])
-{
-    //==========CREATE ROBOT AND WALLS==========
+    int count = 0;
 
-    // read config file
-    std::tuple<std::string, bool, int, int> config = read_csv();
-
-    // create the walls
-    std::vector<Object*> walls;
-
-    // normal perpendicular walls
-    if (std::get<3>(config) == 4) {
-        walls = grid.create_walls(std::get<0>(config));
-    }
-    // angled walls
-    else {
-        walls = grid.create_angled_walls(std::get<0>(config));
-    }
-
-    // get minimum/maximum y values for the robot to spawn
-    int min_y_spawn = grid.get_min_y();
-    int max_y_spawn = grid.get_max_y();
-
-    // Uncomment this line to write the grid to csv to see the grid as a csv
-    // grid.writeGridToCSV("grid.csv"); 
-
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//++++++++++++++++++++DEFINE ANY LOCAL VARIABLES HERE+++++++++++++++++++++++++++++
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//++++++++++++++++++++Modify the instantiation of robot+++++++++++++++++++++++++++
-//+++++robot should be a my_robot class instead of an Object class++++++++++++++++
-//+++++++++++The constructor signature can be however you like++++++++++++++++++++
-//+++Make sure to pass min_y_spawn and max_y_spawn to the constructor of Object+++
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-    // 2*radius is used for width/height of robot
-    Object robot(2*radius, 2*radius, env_width, min_y_spawn, max_y_spawn, radius+5);
-
-    // create a copy. change this to a my_robot class as well
-    Object robot_init = robot;
-
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-    // push the initial position onto robot_pos
-    robot_pos.push_back({robot.x, robot.y});
-    int limit_count = 0;
-    // run the program indefinitely until robot hits the goal or an obstacle
-    while (true)
-    {
-        limit_count++;
-//+++++++++++++++WRITE YOUR MAIN LOOP CODE HERE++++++++++++++++++++++
-//++++++++++++++EXAMPLE: ROBOT SIMPLY MOVES LEFT+++++++++++++++++++++
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-        robot.x -= 1;      
-
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
-        robot_pos.push_back({robot.x, robot.y});
-
-        if (limit_count>=7200) {
-            std::cout << "====Program terminated after 3600 iterations====" << std::endl;
-            break;
+    if (task_choice == 1) {
+        while (count++ < 10000) {
+            robot.sense(grid);
+            robot.follow_wall(grid, 20);
+            robot_path.push_back({robot.x, robot.y});
         }
+    } else if (task_choice == 2) {
+        bool sweep_right = true;
+        while (count++ < 10000) {
+            robot.sense(grid);
+
+            int x_c = robot.x + radius;
+            int y_c = robot.y + radius;
+
+            robot.follow_wall(grid, 20);
+
+            if (y_c - robot.tol >= 0 && robot.grid[x_c][y_c - robot.tol] == 1) robot.v = 1;
+            else if (y_c + robot.tol < 800 && robot.grid[x_c][y_c + robot.tol] == 1) robot.v = -1;
+
+            if (x_c + robot.tol < 800 && robot.grid[x_c + robot.tol][y_c] == 1) robot.h = 1;
+            else if (x_c - robot.tol >= 0 && robot.grid[x_c - robot.tol][y_c] == 1) robot.h = -1;
+
+            robot.moveRobot(robot.h, robot.v);
+
+
+            robot_path.push_back({robot.x, robot.y});
+        }
+    } else {
+        std::cout << "Invalid task number.\n";
+        return 1;
     }
 
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//++++++For now, an 800x800 vector, vec, initialized to -1 is placed here+++++++++
-//+Modify lines 180-181 so robot.grid is passed to both functions instead of vec++
-//++++++Modify line 187 so the third argument to render_grid() is robot.grid++++++
-//++++++After you make the robot instance in line 139 a my_robot class with 
-//      a grid member, lines 182-183 will have robot.grid as its argument
-//      and line 189 will have robot.grid as its third argument.++++++++++++++++++
-//++++++++++++++++++++++++++Then, you can remove vec++++++++++++++++++++++++++++++
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    std::vector<std::vector<int>> vec(800, std::vector<int>(800, -1));
-    std::cout << std::fixed << std::setprecision(2);        // set precision for printing
-    float wall_accuracy = grid.wall_accuracy(vec);          // for task 1: outer walls. replace vec with your robot's grid
-    float accuracy = grid.grid_accuracy(vec);               // for task 2: entire environment inside walls. replace vec with your robot's grid
-    std::cout << "Percent of walls correctly mapped: " << wall_accuracy*100.0 << "%" << std::endl;
-    std::cout << "Percent of environment correctly mapped: " << accuracy*100.0 << "%" << std::endl;
-    if (std::get<1>(config)){
-        render_window(robot_pos, walls, robot_init, env_width, env_height, std::get<2>(config));
+    std::cout << "Wall accuracy: " << grid.wall_accuracy(robot.grid) * 100 << "%\n";
+    std::cout << "Environment accuracy: " << grid.grid_accuracy(robot.grid) * 100 << "%\n";
+
+    if (show_truth) {
+        render_window(robot_path, walls, robot_init, env_width, env_height, speed);
     }
-    render_grid(robot_init, robot_pos, vec, env_width, env_height, radius, lidar_range, std::get<2>(config));
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    render_grid(robot_init, robot_path, robot.grid, env_width, env_height, radius, lidar_range, speed);
     return 0;
 }
+

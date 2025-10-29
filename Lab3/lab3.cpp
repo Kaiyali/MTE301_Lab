@@ -74,7 +74,6 @@ public:
     }
 
     void moveRobot(int h, int v){
-        // Use parameters h and v, and update this robot's position
         if (h == 1 && v == 1) this->y += 1;
         else if (h == 1 && v == 0) this->y += 1;
         else if (h == 1 && v == -1) this->x -= 1;
@@ -129,9 +128,7 @@ int main(int argc, char const *argv[])
         limit_count++;
         robot.sense(grid);
 
-        // Call detection to update robot.h and robot.v
         robot.detection(radius);
-        // Pass the member variables to moveRobot
         robot.moveRobot(robot.h, robot.v);
 
         robot_pos.push_back({robot.x, robot.y});
