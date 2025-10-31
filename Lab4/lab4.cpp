@@ -1,5 +1,3 @@
-//ignonore this file.
-
 #include <cmath>
 #include <iostream>
 #include <random>
@@ -7,210 +5,259 @@
 #include <fstream>
 #include <utility>
 #include <iomanip>
-#include <string>
-#include <vector>
-
+#include <queue>
 #include "utils.h"
 #include "render.h"
 
-using namespace std;
+#define kPI 3.14159265358979323846
 
 class my_robot : public Object {
 private:
-    int phase = 0;
-    float move_speed = 1.0;
-    const float sin45 = 0.7071f;
-    int rotation = 0;
-    int dir_check[4] = {0};
-    int cur_mode[4] = {0};
-    int prev_mode[4] = {0};
-    int robot_to_wall[2] = {0};
+    int lidar_range{50};
+    int radius{10};
+    grid_util* true_grid_ptr = nullptr;
+    std::vector<std::vector<int>> grid{800, std::vector<int>(800, -1)};
+    std::queue<std::vector<int>> paths_queue;
+    const float angle = std::cos(45 * kPI / 180);
+    bool clockwise{true};
 
 public:
-    int tol = 20;
-    int v = 0, h = 0;
-    std::vector<std::vector<int>> grid;
-    int lidar_range;
+    my_robot(int w, int h, int ew, int min_y, int min_x, int tol)
+        : Object(w, h, ew, min_y, min_x, tol) {}
 
-
-
-    my_robot(int w, int h, int env_w, int env_h, int lidar)
-        : Object(w, h, env_w, env_h), lidar_range(lidar) {
-        grid.resize(env_w, std::vector<int>(env_h, -1));
+    void setGrid(grid_util& grid) {
+        true_grid_ptr = &grid;
     }
 
-    void detect_walls(grid_util& true_grid, int tol) {
-        int x_c = x + width / 2;
-        int y_c = y + height / 2;
-        float tol_45 = sin45 * tol;
-
-        dir_check[0] = dir_check[1] = dir_check[2] = dir_check[3] = 0;
-
-        if (grid_value(true_grid, this, x_c - tol, y_c, lidar_range) == 1) dir_check[0] = -1;
-        else if (grid_value(true_grid, this, x_c + tol, y_c, lidar_range) == 1) dir_check[0] = 1;
-
-        if (grid_value(true_grid, this, x_c, y_c - tol, lidar_range) == 1) dir_check[1] = -1;
-        else if (grid_value(true_grid, this, x_c, y_c + tol, lidar_range) == 1) dir_check[1] = 1;
-
-        if (grid_value(true_grid, this, x_c + tol_45, y_c + tol_45, lidar_range) == 1) dir_check[2] = 1;
-        else if (grid_value(true_grid, this, x_c - tol_45, y_c - tol_45, lidar_range) == 1) dir_check[2] = -1;
-
-        if (grid_value(true_grid, this, x_c + tol_45, y_c - tol_45, lidar_range) == 1) dir_check[3] = 1;
-        else if (grid_value(true_grid, this, x_c - tol_45, y_c + tol_45, lidar_range) == 1) dir_check[3] = -1;
+    std::vector<std::vector<int>> getGrid() {
+        return this->grid;
     }
 
-    void find_dir(grid_util& true_grid, int tol) {
-        detect_walls(true_grid, tol);
-        for (int i = 0; i < 4; i++) cur_mode[i] = dir_check[i];
-
-        bool same = true;
-        for (int i = 0; i < 4; i++) {
-            if (cur_mode[i] != prev_mode[i]) {
-                same = false;
-                break;
-            }
-        }
-
-        if (!same) {
-            int zero_count = 0;
-            for (int i = 0; i < 4; i++) if (prev_mode[i] == 0) zero_count++;
-            if (zero_count >= 3) {
-                for (int i = 0; i < 4; i++) cur_mode[i] -= prev_mode[i];
-            }
-        }
-
-        if (cur_mode[2] == 1) {
-            robot_to_wall[0] = 1; robot_to_wall[1] = 1;
-        } else if (cur_mode[2] == -1) {
-            robot_to_wall[0] = -1; robot_to_wall[1] = -1;
-        } else if (cur_mode[3] == 1) {
-            robot_to_wall[0] = 1; robot_to_wall[1] = -1;
-        } else if (cur_mode[3] == -1) {
-            robot_to_wall[0] = -1; robot_to_wall[1] = 1;
-        } else {
-            robot_to_wall[0] = cur_mode[0];
-            robot_to_wall[1] = cur_mode[1];
-        }
-
-        for (int i = 0; i < 4; i++) prev_mode[i] = cur_mode[i];
+    grid_util& true_grid() {
+        return *true_grid_ptr;
     }
 
-    void follow_wall(grid_util& true_grid, int tol) {
-        find_dir(true_grid, tol);
-
-        if (robot_to_wall[0] == 0 && robot_to_wall[1] == 0) {
-            x--; return;
-        }
-
-        if (rotation == 0) {
-            x += -robot_to_wall[1];
-            y += robot_to_wall[0];
-        } else {
-            x += robot_to_wall[1];
-            y += -robot_to_wall[0];
-        }
-
-        x = std::clamp(x, 0, 799);
-        y = std::clamp(y, 0, 799);
+    void switch_dir() {
+        clockwise = !clockwise;
     }
 
-    void sense(grid_util& true_grid) {
-        int x_c = x + width / 2;
-        int y_c = y + height / 2;
+    bool get_dir() {
+        return clockwise;
+    }
 
-        for (int i = x_c - lidar_range; i <= x_c + lidar_range; i++) {
-            for (int j = y_c - lidar_range; j <= y_c + lidar_range; j++) {
-                if (i >= 0 && j >= 0 && i < (int)grid.size() && j < (int)grid[0].size()) {
-                    int dx = i - x_c;
-                    int dy = j - y_c;
-                    if (dx * dx + dy * dy <= lidar_range * lidar_range) {
-                        grid[i][j] = grid_value(true_grid, this, i, j, lidar_range);
-                    }
+    void sensor() {
+        int x_c = x + radius;
+        int y_c = y + radius;
+
+        for (int i = std::max(0, x_c - lidar_range); i < std::min(800, x_c + lidar_range); i++) {
+            for (int j = std::max(0, y_c - lidar_range); j < std::min(800, y_c + lidar_range); j++) {
+                if ((i - x_c) * (i - x_c) + (j - y_c) * (j - y_c) <= lidar_range * lidar_range) {
+                    grid[i][j] = grid_value(true_grid(), this, i, j, lidar_range);
                 }
             }
         }
     }
 
-     void moveRobot(int h, int v){
-        if (h == 1 && v == 1) this->y += 1;
-        else if (h == 1 && v == 0) this->y += 1;
-        else if (h == 1 && v == -1) this->x -= 1;
-        else if (h == 0 && v == 1) this->x += 1;
-        else if (h == 0 && v == 0) this->x -= 1;
-        else if (h == 0 && v == -1) this->x -= 1;
-        else if (h == -1 && v == 1) this->x += 1;
-        else if (h == -1 && v == 0) this->y -= 1;
-        else if (h == -1 && v == -1) this->y -= 1;
+    std::vector<int> detect_walls() {
+        std::vector<int> direction(4, 0);
+        int c_x = x + radius;
+        int c_y = y + radius;
+        int tol = 20;
+        const int diag_tol = tol * angle;
+
+        if (grid[c_x][c_y - tol] == 1) direction[0] = 1;
+        else if (grid[c_x][c_y + tol] == 1) direction[0] = -1;
+
+        if (grid[c_x + tol][c_y] == 1) direction[1] = 1;
+        else if (grid[c_x - tol][c_y] == 1) direction[1] = -1;
+
+        if (grid[c_x - diag_tol][c_y - diag_tol] == 1) direction[2] = 1;
+        else if (grid[c_x + diag_tol][c_y + diag_tol] == 1) direction[2] = -1;
+
+        if (grid[c_x + diag_tol][c_y - diag_tol] == 1) direction[3] = 1;
+        else if (grid[c_x - diag_tol][c_y + diag_tol] == 1) direction[3] = -1;
+
+        return direction;
+    }
+
+    void find_dir(const std::vector<int>& direction) {
+        std::vector<int> robot_to_wall(2, 0);
+
+        if (direction[0] == 0 && direction[1] == 0 && direction[2] == 0 && direction[3] == 0) {
+            robot_to_wall = {-1, 0};
+        } else {
+            if (clockwise) {
+                if (direction[2] == 1) robot_to_wall = {1, -1};
+                if (direction[0] == 1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {1, 0};
+                if (direction[3] == 1) robot_to_wall = {1, 1};
+                if (direction[1] == 1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {0, 1};
+                if (direction[2] == -1) robot_to_wall = {-1, 1};
+                if (direction[0] == -1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {-1, 0};
+                if (direction[3] == -1 && direction[2] != 1) robot_to_wall = {-1, -1};
+                if (direction[1] == -1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {0, -1};
+            } else {
+                if (direction[2] == 1) robot_to_wall = {-1, 1};
+                if (direction[1] == -1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {0, 1};
+                if (direction[3] == -1) robot_to_wall = {1, 1};
+                if (direction[0] == -1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {1, 0};
+                if (direction[2] == -1) robot_to_wall = {1, -1};
+                if (direction[1] == 1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {0, -1};
+                if (direction[3] == 1 && direction[2] != 1) robot_to_wall = {-1, -1};
+                if (direction[0] == 1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {-1, 0};
+            }
+        }
+
+        paths_queue.push(robot_to_wall);
+    }
+
+    void move() {
+        if (!paths_queue.empty()) {
+            std::vector<int> movement = paths_queue.front();
+            paths_queue.pop();
+            x += movement[0];
+            y += movement[1];
+        }
+    }
+
+    void save_grid_csv() {
+        std::string filename = "grid_pred.csv";
+        std::ofstream file(filename);
+
+        if (!file.is_open()) {
+            std::cerr << "Error: Could not open file " << filename << std::endl;
+            return;
+        }
+
+        size_t maxRowSize = 0;
+        for (const auto& col : grid) {
+            if (col.size() > maxRowSize) maxRowSize = col.size();
+        }
+
+        for (size_t row = 0; row < maxRowSize; ++row) {
+            for (size_t col = 0; col < grid.size(); ++col) {
+                if (row < grid[col].size()) file << grid[col][row];
+                if (col < grid.size() - 1) file << ",";
+            }
+            file << "\n";
+        }
+
+        file.close();
+        std::cout << "Robot's grid written to " << filename << std::endl;
     }
 };
 
-int main() {
-    const int env_width = 800, env_height = 800;
-    const int radius = 10;
-    const int lidar_range = 50;
+const int env_width{800}, env_height{800};
+const int radius{10};
+const int min_obj_size{50};
+const int max_obj_size{100};
+int lidar_range{50};
 
-    auto config = read_csv();
-    std::string env_file = std::get<0>(config);
-    bool show_truth = std::get<1>(config);
-    int speed = std::get<2>(config);
-    int env_type = std::get<3>(config);
+grid_util grid(env_width, env_height, min_obj_size, max_obj_size);
+random_generator rand_gen;
+std::vector<std::vector<int>> robot_pos;
 
-    grid_util grid(env_width, env_height, 50, 100);
-    std::vector<Object*> walls = (env_type == 4)
-        ? grid.create_walls(env_file)
-        : grid.create_angled_walls(env_file);
+int main(int argc, char const* argv[]) {
+    std::tuple<std::string, bool, int, int> config = read_csv();
+    std::vector<Object*> walls;
 
-    my_robot robot(2 * radius, 2 * radius, env_width, env_height, lidar_range);
+    if (std::get<3>(config) == 4)
+        walls = grid.create_walls(std::get<0>(config));
+    else
+        walls = grid.create_angled_walls(std::get<0>(config));
+
+    int min_y_spawn = grid.get_min_y();
+    int max_y_spawn = grid.get_max_y();
+
+    std::vector<int> prev_dir(4, 0);
+    int y_ref;
+    bool sweep{false};
+    const std::vector<int> free_dir(4, 0);
+    int max_y{0}, min_y{800};
+
+    my_robot robot(2 * radius, 2 * radius, env_width, min_y_spawn, max_y_spawn, radius + 5);
+    robot.setGrid(grid);
     my_robot robot_init = robot;
 
-    std::vector<std::vector<int>> robot_path;
-    robot_path.push_back({robot.x, robot.y});
+    robot_pos.push_back({robot.x, robot.y});
 
-    int task_choice;
-    std::cout << "Enter task number (1 = Right Wall Follow, 2 = Sweep Mapping): ";
-    std::cin >> task_choice;
+    int limit_count = 0;
+    while (true) {
+        limit_count++;
+        robot.sensor();
 
-    int count = 0;
+        if (!sweep) {
+            robot.find_dir(robot.detect_walls());
+            robot.move();
 
-    if (task_choice == 1) {
-        while (count++ < 10000) {
-            robot.sense(grid);
-            robot.follow_wall(grid, 20);
-            robot_path.push_back({robot.x, robot.y});
+            if (robot.y > max_y) max_y = robot.y;
+            if (robot.y < min_y) min_y = robot.y;
+
+            if (grid.wall_accuracy(robot.getGrid()) >= .97 && robot.y == min_y) {
+                y_ref = robot.y;
+                sweep = true;
+            }
+        } else {
+            robot.find_dir(robot.detect_walls());
+            if (prev_dir == free_dir && robot.detect_walls() != free_dir) robot.switch_dir();
+            robot.move();
+
+            if (robot.y == y_ref + 50) {
+                if (robot.get_dir()) {
+                    while (robot.detect_walls() != free_dir) {
+                        robot.sensor();
+                        robot.x--;
+                        robot_pos.push_back({robot.x, robot.y});
+                        limit_count++;
+                    }
+                    while (robot.detect_walls() == free_dir) {
+                        robot.sensor();
+                        robot.x--;
+                        robot_pos.push_back({robot.x, robot.y});
+                        limit_count++;
+                    }
+                    y_ref += 50;
+                    robot.switch_dir();
+                } else if (!robot.get_dir()) {
+                    while (robot.detect_walls() != free_dir) {
+                        robot.sensor();
+                        robot.x++;
+                        robot_pos.push_back({robot.x, robot.y});
+                        limit_count++;
+                    }
+                    while (robot.detect_walls() == free_dir) {
+                        robot.sensor();
+                        robot.x++;
+                        robot_pos.push_back({robot.x, robot.y});
+                        limit_count++;
+                    }
+                    y_ref += 50;
+                    robot.switch_dir();
+                }
+            }
+
+            if (robot.y >= max_y) break;
+            prev_dir = robot.detect_walls();
         }
-    } else if (task_choice == 2) {
-        bool sweep_right = true;
-        while (count++ < 10000) {
-            robot.sense(grid);
 
-            int x_c = robot.x + radius;
-            int y_c = robot.y + radius;
+        robot_pos.push_back({robot.x, robot.y});
 
-            robot.follow_wall(grid, 20);
-
-            if (y_c - robot.tol >= 0 && robot.grid[x_c][y_c - robot.tol] == 1) robot.v = 1;
-            else if (y_c + robot.tol < 800 && robot.grid[x_c][y_c + robot.tol] == 1) robot.v = -1;
-
-            if (x_c + robot.tol < 800 && robot.grid[x_c + robot.tol][y_c] == 1) robot.h = 1;
-            else if (x_c - robot.tol >= 0 && robot.grid[x_c - robot.tol][y_c] == 1) robot.h = -1;
-
-            robot.moveRobot(robot.h, robot.v);
-
-
-            robot_path.push_back({robot.x, robot.y});
+        if (limit_count >= 7200) {
+            std::cout << "====Program terminated after 3600 iterations====" << std::endl;
+            break;
         }
-    } else {
-        std::cout << "Invalid task number.\n";
-        return 1;
     }
 
-    std::cout << "Wall accuracy: " << grid.wall_accuracy(robot.grid) * 100 << "%\n";
-    std::cout << "Environment accuracy: " << grid.grid_accuracy(robot.grid) * 100 << "%\n";
+    std::cout << std::fixed << std::setprecision(2);
+    float wall_accuracy = grid.wall_accuracy(robot.getGrid());
+    float accuracy = grid.grid_accuracy(robot.getGrid());
 
-    if (show_truth) {
-        render_window(robot_path, walls, robot_init, env_width, env_height, speed);
+    std::cout << "Percent of walls correctly mapped: " << wall_accuracy * 100.0 << "%" << std::endl;
+    std::cout << "Percent of environment correctly mapped: " << accuracy * 100.0 << "%" << std::endl;
+
+    if (std::get<1>(config)) {
+        render_window(robot_pos, walls, robot_init, env_width, env_height, std::get<2>(config));
     }
-    render_grid(robot_init, robot_path, robot.grid, env_width, env_height, radius, lidar_range, speed);
+
+    render_grid(robot_init, robot_pos, robot.getGrid(), env_width, env_height, radius, lidar_range, std::get<2>(config));
     return 0;
 }
-

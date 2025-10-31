@@ -72,39 +72,141 @@ void detection(int radius){
 ### Part 2
 ### Task 1
 ```C++
-    void follow_wall(grid_util& true_grid, int tol) {
-        find_dir(true_grid, tol);
-
-        if (robot_to_wall[0] == 0 && robot_to_wall[1] == 0) {
-            x--; return;
-        }
-
-        if (rotation == 0) {
-            x += -robot_to_wall[1];
-            y += robot_to_wall[0];
-        } else {
-            x += robot_to_wall[1];
-            y += -robot_to_wall[0];
-        }
-
-        x = std::clamp(x, 0, 799);
-        y = std::clamp(y, 0, 799);
-    }
-
-    void sense(grid_util& true_grid) {
-        int x_c = x + width / 2;
-        int y_c = y + height / 2;
-
-        for (int i = x_c - lidar_range; i <= x_c + lidar_range; i++) {
-            for (int j = y_c - lidar_range; j <= y_c + lidar_range; j++) {
-                if (i >= 0 && j >= 0 && i < (int)grid.size() && j < (int)grid[0].size()) {
-                    int dx = i - x_c;
-                    int dy = j - y_c;
-                    if (dx * dx + dy * dy <= lidar_range * lidar_range) {
-                        grid[i][j] = grid_value(true_grid, this, i, j, lidar_range);
+    void sensor(){
+            int x_c = x + radius;
+            int y_c = y + radius;
+            for (int i = std::max(0, x_c - lidar_range); i < std::min(800, x_c + lidar_range); i++) {
+                for (int j = std::max(0, y_c - lidar_range); j < std::min(800, y_c + lidar_range); j++) {
+                    if ((i - x_c) * (i - x_c) + (j - y_c) * (j - y_c) <= lidar_range * lidar_range) {
+                        grid[i][j] = grid_value(true_grid(), this, i, j, lidar_range);
                     }
                 }
             }
+            std::cout << "Sensor updated grid around robot's position: (" << x_c << ", " << y_c << ")" << std::endl;
+        }
+
+        std::vector<int> detect_walls() {
+            std::vector<int> direction(4, 0);  
+            int c_x = x + radius, c_y = y + radius, tol = 20;  
+            const int diag_tol = tol * angle;  
+            if (this->grid[c_x][c_y - tol] == 1) direction[0] = 1; 
+            else if (this->grid[c_x][c_y + tol] == 1) direction[0] = -1;  
+
+            if (this->grid[c_x + tol][c_y] == 1) direction[1] = 1; 
+            else if (this->grid[c_x - tol][c_y] == 1) direction[1] = -1; 
+            if (this->grid[c_x - diag_tol][c_y - diag_tol] == 1) direction[2] = 1;  
+            else if (this->grid[c_x + diag_tol][c_y + diag_tol] == 1) direction[2] = -1;  
+            if (this->grid[c_x + diag_tol][c_y - diag_tol] == 1) direction[3] = 1;  
+            else if (this->grid[c_x - diag_tol][c_y + diag_tol] == 1) direction[3] = -1;  
+            std::cout << "Direction Vector in is [" << direction[0] << ", " << direction[1] << ", " << direction[2] << ", " << direction[3] << "]" << std::endl;
+            return direction;  
+        }
+        void find_dir(const std::vector<int>& direction) {
+            std::vector<int> robot_to_wall(2, 0); 
+            if(direction[0] == 0 && direction[1] == 0 && direction[2] == 0 && direction[3] == 0){ 
+                robot_to_wall = {-1, 0};           
+            } else{
+                if (clockwise){
+                    if (direction[2] == 1) {              
+                        robot_to_wall = {1, -1};            
+                    } if (direction[0] == 1 && direction[2] == 0 && direction[3] == 0) {                
+                        robot_to_wall = {1, 0};               
+                    } if (direction[3] == 1) {              
+                        robot_to_wall = {1, 1};             
+                    } if (direction[1] == 1 && direction[2] == 0 && direction[3] == 0) {              
+                        robot_to_wall = {0, 1};               
+                    } if (direction[2] == -1) {             
+                        robot_to_wall = {-1, 1};           
+                    } if (direction[0] == -1 && direction[2] == 0 && direction[3] == 0) {               
+                        robot_to_wall = {-1, 0};              
+                    } if (direction[3] == -1 && direction[2] != 1) {             
+                        robot_to_wall = {-1, -1};          
+                    } if (direction[1] == -1 && direction[2] == 0 && direction[3] == 0) {             
+                        robot_to_wall = {0, -1};              
+                    }
+                } else {
+                    if (direction[2] == 1) {              
+                        robot_to_wall = {-1, 1};            
+                    } if (direction[1] == -1 && direction[2] == 0 && direction[3] == 0) {             
+                        robot_to_wall = {0, 1};              
+                    } if (direction[3] == -1) {             
+                        robot_to_wall = {1, 1};          
+                    } if (direction[0] == -1 && direction[2] == 0 && direction[3] == 0) {               
+                        robot_to_wall = {1, 0};              
+                    } if (direction[2] == -1) {             
+                        robot_to_wall = {1, -1};           
+                    } if (direction[1] == 1 && direction[2] == 0 && direction[3] == 0) {              
+                        robot_to_wall = {0, -1};               
+                    } if (direction[3] == 1 && direction[2] != 1) {              
+                        robot_to_wall = {-1, -1};             
+                    } if (direction[0] == 1 && direction[2] == 0 && direction[3] == 0) {                
+                        robot_to_wall = {-1, 0};               
+                    }
+                }
+            }
+            
+            paths_queue.push(robot_to_wall);
+            std::cout << "Move added to queue: [" << robot_to_wall[0] << ", " << robot_to_wall[1] << "]" << std::endl;
+        }
+        void move() {
+            if (!paths_queue.empty()) { 
+                std::vector<int> movement = paths_queue.front();
+                paths_queue.pop();
+                this->x += movement[0];
+                this->y += movement[1];
+                std::cout << "Robot moved to position: (" << this->x << ", " << this->y << ")" << std::endl;
+
+            }
+
+        }
+```
+
+#### Main Loop
+
+```C++
+        robot.sensor();
+        robot.find_dir(robot.detect_walls());
+        robot.move();
+```
+
+### Task 2
+```C++
+    void find_dir(const std::vector<int>& direction) {
+        std::vector<int> robot_to_wall(2, 0);
+
+        if (direction[0] == 0 && direction[1] == 0 && direction[2] == 0 && direction[3] == 0) {
+            robot_to_wall = {-1, 0};
+        } else {
+            if (clockwise) {
+                if (direction[2] == 1) robot_to_wall = {1, -1};
+                if (direction[0] == 1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {1, 0};
+                if (direction[3] == 1) robot_to_wall = {1, 1};
+                if (direction[1] == 1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {0, 1};
+                if (direction[2] == -1) robot_to_wall = {-1, 1};
+                if (direction[0] == -1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {-1, 0};
+                if (direction[3] == -1 && direction[2] != 1) robot_to_wall = {-1, -1};
+                if (direction[1] == -1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {0, -1};
+            } else {
+                if (direction[2] == 1) robot_to_wall = {-1, 1};
+                if (direction[1] == -1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {0, 1};
+                if (direction[3] == -1) robot_to_wall = {1, 1};
+                if (direction[0] == -1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {1, 0};
+                if (direction[2] == -1) robot_to_wall = {1, -1};
+                if (direction[1] == 1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {0, -1};
+                if (direction[3] == 1 && direction[2] != 1) robot_to_wall = {-1, -1};
+                if (direction[0] == 1 && direction[2] == 0 && direction[3] == 0) robot_to_wall = {-1, 0};
+            }
+        }
+
+        paths_queue.push(robot_to_wall);
+    }
+
+    void move() {
+        if (!paths_queue.empty()) {
+            std::vector<int> movement = paths_queue.front();
+            paths_queue.pop();
+            x += movement[0];
+            y += movement[1];
         }
     }
 ```
@@ -112,12 +214,60 @@ void detection(int radius){
 #### Main Loop
 
 ```C++
-    robot.sense(grid);
-    robot.follow_wall(grid, 13);
+  if (!sweep) {
+            robot.find_dir(robot.detect_walls());
+            robot.move();
+
+            if (robot.y > max_y) max_y = robot.y;
+            if (robot.y < min_y) min_y = robot.y;
+
+            if (grid.wall_accuracy(robot.getGrid()) >= .97 && robot.y == min_y) {
+                y_ref = robot.y;
+                sweep = true;
+            }
+        } else {
+            robot.find_dir(robot.detect_walls());
+            if (prev_dir == free_dir && robot.detect_walls() != free_dir) robot.switch_dir();
+            robot.move();
+
+            if (robot.y == y_ref + 50) {
+                if (robot.get_dir()) {
+                    while (robot.detect_walls() != free_dir) {
+                        robot.sensor();
+                        robot.x--;
+                        robot_pos.push_back({robot.x, robot.y});
+                        limit_count++;
+                    }
+                    while (robot.detect_walls() == free_dir) {
+                        robot.sensor();
+                        robot.x--;
+                        robot_pos.push_back({robot.x, robot.y});
+                        limit_count++;
+                    }
+                    y_ref += 50;
+                    robot.switch_dir();
+                } else if (!robot.get_dir()) {
+                    while (robot.detect_walls() != free_dir) {
+                        robot.sensor();
+                        robot.x++;
+                        robot_pos.push_back({robot.x, robot.y});
+                        limit_count++;
+                    }
+                    while (robot.detect_walls() == free_dir) {
+                        robot.sensor();
+                        robot.x++;
+                        robot_pos.push_back({robot.x, robot.y});
+                        limit_count++;
+                    }
+                    y_ref += 50;
+                    robot.switch_dir();
+                }
+            }
+
+            if (robot.y >= max_y) break;
+            prev_dir = robot.detect_walls();
+        }
 ```
-
-### Task 2
-
 
 
 
